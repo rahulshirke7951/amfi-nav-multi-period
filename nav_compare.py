@@ -3,6 +3,10 @@ import json
 import pandas as pd
 import openpyxl
 
+# ======================================================
+# LOAD RULES
+# ======================================================
+
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 with open(os.path.join(BASE_DIR, "scheme_rules.json")) as f:
@@ -34,8 +38,10 @@ def exclusion_reason(name):
 
 def select_variant(grp):
     for rule in RULES["selection_rules"]["priority_ladder"]:
-        m = grp[grp["Mutual Fund Name"].str.upper()
-                .apply(lambda x: all(k in x for k in rule))]
+        m = grp[
+            grp["Mutual Fund Name"].str.upper()
+            .apply(lambda x: all(k in x for k in rule))
+        ]
         if not m.empty:
             return m.iloc[0], grp.drop(m.index)
     return grp.iloc[0], grp.iloc[1:]
@@ -47,42 +53,47 @@ def select_variant(grp):
 def flatten(file, sheet="NAV Data"):
     wb = openpyxl.load_workbook(file)
     ws = wb[sheet]
+
     for m in list(ws.merged_cells.ranges):
-        v = ws.cell(m.min_row, m.min_col).value
+        val = ws.cell(m.min_row, m.min_col).value
         ws.unmerge_cells(str(m))
         for r in range(m.min_row, m.max_row + 1):
             for c in range(m.min_col, m.max_col + 1):
-                ws.cell(r, c).value = v
+                ws.cell(r, c).value = val
+
     out = file.replace(".xlsx", "_flat.xlsx")
     wb.save(out)
     return out
 
 # ======================================================
-# EXTRACT ONE FILE (BACKEND RICH, OUTPUT SIMPLE)
+# EXTRACT ONE FILE
 # ======================================================
 
 def extract(file):
     flat = flatten(file)
     raw = pd.read_excel(flat, header=None).dropna(how="all")
 
-    hdr = raw[raw.apply(lambda r: r.astype(str)
-                        .str.contains("NAV Name", case=False).any(), axis=1)].index[0]
-    raw.columns = raw.iloc[hdr]
+    hdr = raw[
+        raw.apply(lambda r: r.astype(str)
+        .str.contains("NAV Name", case=False).any(), axis=1)
+    ].index[0]
 
+    raw.columns = raw.iloc[hdr]
     df = raw.iloc[hdr + 1:][["NAV Name", "Net Asset Value"]]
     df.columns = ["Mutual Fund Name", "NAV"]
+
     df["NAV"] = pd.to_numeric(df["NAV"], errors="coerce")
     df = df.dropna()
 
     total_raw = len(df)
 
-    rule_excl = []
+    excluded = []
     eligible = []
 
     for _, r in df.iterrows():
         reason = exclusion_reason(r["Mutual Fund Name"])
         if reason:
-            rule_excl.append({
+            excluded.append({
                 "Mutual Fund Name": r["Mutual Fund Name"],
                 "Reason": reason
             })
@@ -109,15 +120,15 @@ def extract(file):
                 })
 
     final_df = pd.DataFrame(kept)
-    excluded_df = pd.DataFrame(rule_excl + variant_excl)
+    excluded_df = pd.DataFrame(excluded + variant_excl)
 
     return final_df, excluded_df, total_raw
 
 # ======================================================
-# MAIN + RECONCILIATION
+# SINGLE COMPARISON RUN
 # ======================================================
 
-def run(latest, past):
+def run(latest, past, output_file):
     l_df, l_excl, l_raw = extract(latest)
     p_df, p_excl, p_raw = extract(past)
 
@@ -132,18 +143,18 @@ def run(latest, past):
         indicator=True
     )
 
-    # Not comparable
     l_nc = merged[merged["_merge"] == "left_only"]
     p_nc = merged[merged["_merge"] == "right_only"]
 
-    # Comparable
     comp = merged[merged["_merge"] == "both"].copy()
 
-    # Zero NAV
     l_zero = comp[comp["Latest NAV"] == 0]
     p_zero = comp[comp["Past NAV"] == 0]
 
-    comp = comp[(comp["Latest NAV"] != 0) & (comp["Past NAV"] != 0)]
+    comp = comp[
+        (comp["Latest NAV"] != 0) &
+        (comp["Past NAV"] != 0)
+    ]
 
     comp["Change"] = comp["Latest NAV"] - comp["Past NAV"]
     comp["Change %"] = (comp["Change"] / comp["Past NAV"] * 100).round(2)
@@ -152,7 +163,6 @@ def run(latest, past):
         ["Mutual Fund Name", "Latest NAV", "Past NAV", "Change", "Change %"]
     ].sort_values("Change %", ascending=False)
 
-    # Append backend exclusions to visible excluded sheets
     l_excl = pd.concat([
         l_excl,
         l_zero.assign(Reason="Excluded: zero NAV")[["Mutual Fund Name", "Reason"]],
@@ -165,7 +175,6 @@ def run(latest, past):
         p_nc.assign(Reason="Excluded: not comparable")[["Mutual Fund Name", "Reason"]]
     ], ignore_index=True)
 
-    # Reconciliation
     rec = pd.DataFrame([
         ["Latest", "Total Raw", l_raw],
         ["Latest", "Included in NAV Comparison", len(nav_comp)],
@@ -176,16 +185,31 @@ def run(latest, past):
         ["Past", "Excluded Schemes", len(p_excl)],
     ], columns=["File Type", "Category", "Count"])
 
-    # Output
-    with pd.ExcelWriter("NAV_Comparison_Result.xlsx", engine="openpyxl") as w:
+    with pd.ExcelWriter(output_file, engine="openpyxl") as w:
         nav_comp.to_excel(w, "NAV Comparison", index=False)
         l_excl.to_excel(w, "Excluded_Schemes__Latest", index=False)
         p_excl.to_excel(w, "Excluded_Schemes__Past", index=False)
         rec.to_excel(w, "Reconciliation", index=False)
 
 # ======================================================
-# ENTRY
+# MULTI-PERIOD DRIVER
 # ======================================================
 
 if __name__ == "__main__":
-    run("data/latest_nav.xlsx", "data/past_nav.xlsx")
+    data_dir = "data"
+    latest_file = os.path.join(data_dir, "Latest.xlsx")
+
+    if not os.path.exists(latest_file):
+        raise FileNotFoundError("Latest.xlsx is mandatory.")
+
+    for i in range(1, 5):
+        past_file = os.path.join(data_dir, f"Past{i}.xlsx")
+
+        if not os.path.exists(past_file):
+            print(f"Skipping Past{i}: file not found")
+            continue
+
+        output = f"NAV_Comparison_Latest_vs_Past{i}.xlsx"
+        print(f"Running comparison: Latest vs Past{i}")
+
+        run(latest_file, past_file, output)
