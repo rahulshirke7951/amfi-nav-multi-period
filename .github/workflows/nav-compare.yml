@@ -1,0 +1,38 @@
+name: NAV Comparison (Multi-Period)
+
+on:
+  workflow_dispatch:   # allows manual run
+
+jobs:
+  run-nav-compare:
+    runs-on: ubuntu-latest
+
+    steps:
+      # Step 1: Get repository code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # Step 2: Setup Python
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      # Step 3: Install dependencies
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pandas openpyxl
+
+      # Step 4: Run NAV comparison
+      - name: Run NAV comparison script
+        run: |
+          python nav_compare_multi_period.py
+
+      # Step 5: Upload result Excel files
+      - name: Upload output Excel files
+        uses: actions/upload-artifact@v4
+        with:
+          name: NAV-Comparison-Results
+          path: |
+            NAV_Comparison_Latest_vs_*.xlsx
