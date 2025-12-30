@@ -1,0 +1,34 @@
+{
+  "_description": "Excel presentation rules only.",
+
+  "nav_comparison": {
+    "header": {
+      "fill_color": "1F4E78",
+      "font_color": "FFFFFF",
+      "bold": true,
+      "align": "center"
+    },
+
+    "column_widths": {
+      "Mutual Fund Name": 60,
+      "Type": 12,
+      "Latest NAV": 15,
+      "Past NAV": 15,
+      "Change": 15,
+      "Change %": 15
+    },
+
+    "numeric_alignment": "right",
+
+    "change_percent_colors": {
+      "positive": "C6EFCE",
+      "negative": "FFC7CE"
+    }
+  },
+
+  "excluded_reason_colors": {
+    "contains": "FFC7CE",
+    "non-preferred": "FFEB9C",
+    "missing": "D9D9D9"
+  }
+}

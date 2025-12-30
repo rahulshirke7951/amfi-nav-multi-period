@@ -1,0 +1,22 @@
+{
+  "base_scheme_remove_terms": [
+    "DIRECT PLAN",
+    "REGULAR PLAN",
+    "GROWTH",
+    "IDCW",
+    "OPTION"
+  ],
+
+  "exclusion_rules": {
+    "contains_any": ["IDCW"]
+  },
+
+  "selection_rules": {
+    "priority_ladder": [
+      ["REGULAR PLAN", "GROWTH"],
+      ["REGULAR PLAN"],
+      ["DIRECT PLAN", "GROWTH"],
+      ["DIRECT PLAN"]
+    ]
+  }
+}
